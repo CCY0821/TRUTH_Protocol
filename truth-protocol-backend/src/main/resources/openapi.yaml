@@ -1,0 +1,646 @@
+openapi: 3.0.3
+
+# ========================================================================
+# TRUTH Protocol API Specification
+# ========================================================================
+# Purpose: RESTful API for blockchain-based identity verification &
+#          credential minting (SBT issuance on Polygon PoS)
+# Architecture: Spring Boot backend + Relayer Worker + OCI Infrastructure
+# Authentication: JWT Bearer Token (future: Web3 signature support)
+# ========================================================================
+
+info:
+  title: TRUTH Protocol API
+  version: 1.0.0
+  description: |
+    ## Overview
+    TRUTH Protocol provides enterprise-grade identity verification (KYC) and
+    blockchain credential minting services. This API enables:
+
+    - **Issuer (B2B)**: Organizations to issue tamper-proof credentials (SBT)
+    - **Verifier (C2C)**: End-users to verify credential authenticity via QR scan
+    - **Holder**: Asset owners to manage their digital credentials
+
+    ## Key Features
+    - **Gas Abstraction**: Backend Relayer handles all blockchain transactions
+    - **Credits System**: Pre-paid SaaS model (no crypto needed for issuers)
+    - **Arweave Storage**: Permanent metadata storage
+    - **Private Deployment**: Database and secrets in OCI private subnet
+
+    ## Authentication
+    All protected endpoints require a valid JWT token in the Authorization header:
+    ```
+    Authorization: Bearer <JWT_TOKEN>
+    ```
+
+    ## Rate Limiting
+    - **Authenticated requests**: 1000 requests/hour per user
+    - **Public endpoints**: 100 requests/hour per IP
+
+    ## Error Handling
+    All errors follow the standard `ErrorResponse` schema with:
+    - HTTP status code (400, 401, 403, 500, etc.)
+    - Service-level error code (e.g., `MINT_INSUFFICIENT_CREDITS`)
+    - Human-readable error message
+    - Request path and timestamp
+
+  contact:
+    name: TRUTH Protocol Support
+    email: support@truthprotocol.com
+    url: https://truthprotocol.com/docs
+
+  license:
+    name: Proprietary
+    url: https://truthprotocol.com/license
+
+servers:
+  - url: /api/v1
+    description: Production API (relative path, deployed behind Load Balancer)
+  - url: http://localhost:8080/api/v1
+    description: Local Development Server
+  - url: https://api-dev.truthprotocol.com/api/v1
+    description: Development Environment
+  - url: https://api-staging.truthprotocol.com/api/v1
+    description: Staging Environment
+
+# ========================================================================
+# SECURITY SCHEMES
+# ========================================================================
+
+security:
+  - AuthJWT: []
+
+components:
+  securitySchemes:
+    AuthJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtained from `/auth/login` endpoint.
+
+        **Token Lifetime**: 1 hour (3600 seconds)
+
+        **Token Claims**:
+        - `sub`: User ID (UUID)
+        - `username`: User's email or username
+        - `role`: User role (ISSUER, VERIFIER, ADMIN)
+        - `exp`: Expiration timestamp
+        - `iat`: Issued at timestamp
+
+        **Example**:
+        ```
+        Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        ```
+
+  # ========================================================================
+  # SCHEMAS (Data Models)
+  # ========================================================================
+
+  schemas:
+    # ----------------------------------------------------------------------
+    # Authentication Schemas
+    # ----------------------------------------------------------------------
+
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          format: email
+          description: User's email address (used as username)
+          example: issuer@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: User's password (minimum 8 characters)
+          example: SecurePassword123!
+      description: Login credentials for traditional authentication
+
+    LoginResponse:
+      type: object
+      required:
+        - token
+        - user
+      properties:
+        token:
+          type: string
+          description: JWT access token (valid for 1 hour)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5YzhmMzZlOS1hMjQ3LTQ4YjktYjNjNS0xZjQ3ZGE4ZDk2ZTEiLCJ1c2VybmFtZSI6Imlzc3VlckBleGFtcGxlLmNvbSIsInJvbGUiOiJJU1NVRVIiLCJpYXQiOjE3MDY3NjQ4MDAsImV4cCI6MTcwNjc2ODQwMH0.KjwI9v7X3YZ1qL5mN8pQ2rS4tU6vW7xY0zA1bC2dE3f
+        user:
+          $ref: '#/components/schemas/User'
+      description: Successful login response with JWT token and user details
+
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - role
+        - kyc_status
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique user identifier
+          example: 9c8f36e9-a247-48b9-b3c5-1f47da8d96e1
+        username:
+          type: string
+          description: User's display name
+          example: issuer@example.com
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: issuer@example.com
+        role:
+          type: string
+          enum: [ISSUER, VERIFIER, ADMIN, HOLDER]
+          description: User's role in the system
+          example: ISSUER
+        kyc_status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+          description: KYC verification status (required for ISSUER role)
+          example: APPROVED
+        credits_balance:
+          type: integer
+          minimum: 0
+          description: Remaining credits for minting (ISSUER only)
+          example: 150
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+          example: "2025-01-15T10:30:00Z"
+      description: User account information
+
+    # ----------------------------------------------------------------------
+    # Credential Minting Schemas
+    # ----------------------------------------------------------------------
+
+    MintRequest:
+      type: object
+      required:
+        - recipient_wallet_address
+        - issuer_ref_id
+        - metadata
+      properties:
+        recipient_wallet_address:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+          minLength: 42
+          maxLength: 42
+          description: EVM-compatible wallet address (Ethereum/Polygon format)
+          example: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+        issuer_ref_id:
+          type: string
+          maxLength: 100
+          description: Issuer's internal reference ID for tracking
+          example: ORD-2025-001234
+        metadata:
+          type: object
+          required:
+            - title
+            - description
+          properties:
+            title:
+              type: string
+              maxLength: 200
+              description: Credential title (visible on-chain)
+              example: "Official Authorized Dealer Certificate 2025"
+            description:
+              type: string
+              maxLength: 1000
+              description: Detailed credential description
+              example: "This certificate proves that the holder is an authorized dealer of XYZ products for the year 2025."
+            image:
+              type: string
+              format: uri
+              description: URL to credential image (IPFS/Arweave/HTTP)
+              example: "https://arweave.net/abc123.../certificate.png"
+            product_sku:
+              type: string
+              description: Product SKU (for product authenticity credentials)
+              example: "PROD-XYZ-2025-GOLD"
+            batch_no:
+              type: string
+              description: Batch number (for manufacturing/supply chain tracking)
+              example: "BATCH-20250115-A001"
+            expiry_date:
+              type: string
+              format: date
+              description: Credential expiration date (optional)
+              example: "2025-12-31"
+            attributes:
+              type: array
+              description: Additional custom attributes
+              items:
+                type: object
+                properties:
+                  trait_type:
+                    type: string
+                    example: "Region"
+                  value:
+                    type: string
+                    example: "North America"
+          description: |
+            Credential metadata (will be uploaded to Arweave and referenced on-chain).
+            Follows ERC-721 metadata standard with custom extensions.
+      description: Request to mint a new SBT credential (async operation)
+
+    MintResponse:
+      type: object
+      required:
+        - credential_id
+        - status
+        - created_at
+      properties:
+        credential_id:
+          type: string
+          format: uuid
+          description: Unique credential identifier (for tracking)
+          example: f47ac10b-58cc-4372-a567-0e02b2c3d479
+        status:
+          type: string
+          enum: [QUEUED, PENDING, CONFIRMED, FAILED]
+          description: |
+            Current status of the minting request:
+            - `QUEUED`: Request accepted, waiting for Relayer Worker
+            - `PENDING`: Transaction submitted to blockchain
+            - `CONFIRMED`: Successfully minted on-chain
+            - `FAILED`: Minting failed (credits refunded)
+          example: QUEUED
+        issuer_ref_id:
+          type: string
+          description: Echo of the issuer's reference ID
+          example: ORD-2025-001234
+        estimated_completion:
+          type: string
+          format: date-time
+          description: Estimated completion time (SLA: < 10 minutes)
+          example: "2025-01-15T10:40:00Z"
+        credits_consumed:
+          type: integer
+          description: Number of credits deducted for this operation
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+          description: Request creation timestamp
+          example: "2025-01-15T10:30:00Z"
+      description: Async minting response (202 Accepted)
+
+    # ----------------------------------------------------------------------
+    # Error Response Schema (Standard)
+    # ----------------------------------------------------------------------
+
+    ErrorResponse:
+      type: object
+      required:
+        - timestamp
+        - status
+        - code
+        - message
+        - path
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Error occurrence timestamp (ISO 8601)
+          example: "2025-01-15T10:30:00.123Z"
+        status:
+          type: integer
+          description: HTTP status code
+          example: 403
+        code:
+          type: string
+          description: |
+            Service-level error code for programmatic handling.
+
+            **Common Error Codes**:
+            - `AUTH_INVALID_CREDENTIALS`: Invalid username/password
+            - `AUTH_TOKEN_EXPIRED`: JWT token has expired
+            - `AUTH_UNAUTHORIZED`: Missing or invalid token
+            - `MINT_INSUFFICIENT_CREDITS`: Issuer has insufficient credits
+            - `MINT_INVALID_WALLET`: Invalid recipient wallet address
+            - `MINT_KYC_REQUIRED`: Issuer KYC not approved
+            - `MINT_RATE_LIMIT`: Too many minting requests
+            - `INTERNAL_SERVER_ERROR`: Unexpected server error
+          example: MINT_INSUFFICIENT_CREDITS
+        message:
+          type: string
+          description: Human-readable error description
+          example: "Your credit balance is 0. Please top up to continue minting."
+        path:
+          type: string
+          description: API endpoint path where error occurred
+          example: /api/v1/credentials/mint
+        details:
+          type: object
+          description: Additional error context (optional)
+          additionalProperties: true
+          example:
+            current_balance: 0
+            required_credits: 1
+      description: Standardized error response structure
+
+# ========================================================================
+# API PATHS (Endpoints)
+# ========================================================================
+
+paths:
+  # ------------------------------------------------------------------------
+  # Authentication & Authorization
+  # ------------------------------------------------------------------------
+
+  /auth/login:
+    post:
+      summary: User Login (JWT Authentication)
+      description: |
+        Authenticate user with username and password to obtain a JWT token.
+
+        **Future Enhancement**: Support Web3 signature-based authentication
+        (e.g., "Sign in with Ethereum" via MetaMask).
+
+        **Rate Limiting**: 10 attempts per IP per minute (prevent brute force).
+
+        **Token Lifetime**: 1 hour (3600 seconds).
+      operationId: login
+      tags:
+        - Authentication
+      security: []  # No authentication required for login endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              issuer_login:
+                summary: Issuer Login
+                value:
+                  username: issuer@example.com
+                  password: SecurePassword123!
+              verifier_login:
+                summary: Verifier Login
+                value:
+                  username: verifier@example.com
+                  password: AnotherPassword456!
+      responses:
+        '200':
+          description: Login successful, JWT token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5YzhmMzZlOS1hMjQ3LTQ4YjktYjNjNS0xZjQ3ZGE4ZDk2ZTEiLCJ1c2VybmFtZSI6Imlzc3VlckBleGFtcGxlLmNvbSIsInJvbGUiOiJJU1NVRVIiLCJpYXQiOjE3MDY3NjQ4MDAsImV4cCI6MTcwNjc2ODQwMH0.KjwI9v7X3YZ1qL5mN8pQ2rS4tU6vW7xY0zA1bC2dE3f
+                user:
+                  id: 9c8f36e9-a247-48b9-b3c5-1f47da8d96e1
+                  username: issuer@example.com
+                  email: issuer@example.com
+                  role: ISSUER
+                  kyc_status: APPROVED
+                  credits_balance: 150
+                  created_at: "2025-01-15T10:30:00Z"
+        '401':
+          description: Authentication failed (invalid credentials)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                timestamp: "2025-01-15T10:30:00.123Z"
+                status: 401
+                code: AUTH_INVALID_CREDENTIALS
+                message: "Invalid username or password."
+                path: /api/v1/auth/login
+        '429':
+          description: Too many login attempts (rate limit exceeded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                timestamp: "2025-01-15T10:30:00.123Z"
+                status: 429
+                code: AUTH_RATE_LIMIT
+                message: "Too many login attempts. Please try again in 60 seconds."
+                path: /api/v1/auth/login
+                details:
+                  retry_after_seconds: 60
+
+  # ------------------------------------------------------------------------
+  # Credential Minting (Core Relayer Service)
+  # ------------------------------------------------------------------------
+
+  /credentials/mint:
+    post:
+      summary: Mint SBT Credential (Async)
+      description: |
+        Issue a new Soulbound Token (SBT) credential on Polygon PoS blockchain.
+
+        ## Process Flow
+        1. **Request Validation**: Verify issuer KYC status and credits balance
+        2. **Credit Deduction**: Pre-deduct 1 credit (locked until confirmation)
+        3. **Metadata Upload**: Upload metadata to Arweave (permanent storage)
+        4. **Queue Task**: Push minting task to Spring Batch job queue
+        5. **Async Processing**: Relayer Worker signs and submits transaction
+        6. **Confirmation**: Update credential status to CONFIRMED (or FAILED)
+
+        ## SLA Commitment
+        - **Acceptance**: Immediate (< 100ms)
+        - **Completion**: < 10 minutes (99% of cases)
+        - **RPO**: < 15 minutes (with automatic retry)
+
+        ## Error Handling
+        - If minting fails, credit is automatically refunded
+        - Transaction hash available for on-chain verification
+        - WebSocket notification sent on status change
+
+        ## Prerequisites
+        - Issuer must have **approved KYC status**
+        - Issuer must have **at least 1 credit** available
+        - Recipient wallet must be a **valid EVM address**
+      operationId: mintCredential
+      tags:
+        - Credentials
+      security:
+        - AuthJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MintRequest'
+            examples:
+              product_authenticity:
+                summary: Product Authenticity Certificate
+                description: Example for authenticating a luxury product
+                value:
+                  recipient_wallet_address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+                  issuer_ref_id: ORD-2025-001234
+                  metadata:
+                    title: "Official Authorized Dealer Certificate 2025"
+                    description: "This certificate proves that the holder is an authorized dealer of XYZ luxury watches for the year 2025."
+                    image: "https://arweave.net/abc123/certificate.png"
+                    product_sku: "WATCH-GOLD-2025-LIMITED"
+                    batch_no: "BATCH-20250115-A001"
+                    expiry_date: "2025-12-31"
+                    attributes:
+                      - trait_type: "Region"
+                        value: "North America"
+                      - trait_type: "Tier"
+                        value: "Premium"
+              educational_certificate:
+                summary: Educational Certificate
+                description: Example for issuing a graduation diploma
+                value:
+                  recipient_wallet_address: "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199"
+                  issuer_ref_id: GRAD-2025-JOHN-DOE
+                  metadata:
+                    title: "Bachelor of Science in Computer Science"
+                    description: "Awarded to John Doe for completing the Bachelor's degree program in Computer Science with distinction."
+                    image: "https://arweave.net/xyz789/diploma.png"
+                    product_sku: ""
+                    batch_no: ""
+                    expiry_date: null
+                    attributes:
+                      - trait_type: "University"
+                        value: "MIT"
+                      - trait_type: "Graduation Year"
+                        value: "2025"
+                      - trait_type: "GPA"
+                        value: "3.95"
+      responses:
+        '202':
+          description: |
+            **Accepted** - Minting request accepted and queued for processing.
+
+            The credential will be minted asynchronously by the Relayer Worker.
+            Use the `credential_id` to track status via polling or WebSocket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MintResponse'
+              example:
+                credential_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                status: QUEUED
+                issuer_ref_id: ORD-2025-001234
+                estimated_completion: "2025-01-15T10:40:00Z"
+                credits_consumed: 1
+                created_at: "2025-01-15T10:30:00Z"
+        '400':
+          description: Bad request (invalid input)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                timestamp: "2025-01-15T10:30:00.123Z"
+                status: 400
+                code: MINT_INVALID_WALLET
+                message: "Invalid recipient wallet address format. Must be a 42-character EVM address starting with '0x'."
+                path: /api/v1/credentials/mint
+                details:
+                  provided_address: "0xInvalidAddress"
+                  expected_format: "^0x[a-fA-F0-9]{40}$"
+        '401':
+          description: Unauthorized (missing or invalid JWT token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                timestamp: "2025-01-15T10:30:00.123Z"
+                status: 401
+                code: AUTH_UNAUTHORIZED
+                message: "Missing or invalid authorization token."
+                path: /api/v1/credentials/mint
+        '403':
+          description: |
+            **Forbidden** - Insufficient credits or KYC not approved.
+
+            Common reasons:
+            - Issuer has 0 credits remaining (need to top up)
+            - Issuer KYC status is PENDING or REJECTED
+            - User role is not ISSUER
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                insufficient_credits:
+                  summary: Insufficient Credits
+                  value:
+                    timestamp: "2025-01-15T10:30:00.123Z"
+                    status: 403
+                    code: MINT_INSUFFICIENT_CREDITS
+                    message: "Your credit balance is 0. Please top up to continue minting."
+                    path: /api/v1/credentials/mint
+                    details:
+                      current_balance: 0
+                      required_credits: 1
+                      top_up_url: "https://truthprotocol.com/credits/buy"
+                kyc_not_approved:
+                  summary: KYC Not Approved
+                  value:
+                    timestamp: "2025-01-15T10:30:00.123Z"
+                    status: 403
+                    code: MINT_KYC_REQUIRED
+                    message: "Your KYC verification is pending. Please complete KYC to start minting credentials."
+                    path: /api/v1/credentials/mint
+                    details:
+                      kyc_status: PENDING
+                      kyc_url: "https://truthprotocol.com/kyc/verify"
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                timestamp: "2025-01-15T10:30:00.123Z"
+                status: 429
+                code: MINT_RATE_LIMIT
+                message: "Too many minting requests. You can mint up to 100 credentials per hour."
+                path: /api/v1/credentials/mint
+                details:
+                  limit: 100
+                  window_seconds: 3600
+                  retry_after_seconds: 120
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                timestamp: "2025-01-15T10:30:00.123Z"
+                status: 500
+                code: INTERNAL_SERVER_ERROR
+                message: "An unexpected error occurred. Please try again later or contact support."
+                path: /api/v1/credentials/mint
+                details:
+                  request_id: req_abc123xyz
+                  support_email: support@truthprotocol.com
+
+# ========================================================================
+# TAGS (API Grouping)
+# ========================================================================
+
+tags:
+  - name: Authentication
+    description: |
+      User authentication and authorization endpoints.
+      Includes traditional login and future Web3 wallet integration.
+  - name: Credentials
+    description: |
+      SBT credential management endpoints.
+      Core business logic for minting, verifying, and managing blockchain credentials.

@@ -1,0 +1,116 @@
+# ========================================================================
+# TRUTH Protocol - Terraform Variables (EXAMPLE)
+# ========================================================================
+# Instructions:
+# 1. Copy this file to `terraform.tfvars`
+# 2. Fill in your actual OCI credentials & configuration
+# 3. NEVER commit terraform.tfvars to Git (already in .gitignore)
+# 4. For production, use OCI Vault or environment variables instead
+# ========================================================================
+
+# --------------------------------------------------
+# OCI Authentication (REQUIRED)
+# --------------------------------------------------
+# How to get these values:
+# 1. Tenancy OCID: OCI Console > Profile > Tenancy Details
+# 2. User OCID: OCI Console > Profile > User Settings
+# 3. Fingerprint: Run `openssl rsa -pubout -outform DER -in ~/.oci/oci_api_key.pem | openssl md5 -c`
+# 4. Private Key: Generate via `openssl genrsa -out ~/.oci/oci_api_key.pem 2048`
+
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+user_ocid        = "ocid1.user.oc1..aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "us-phoenix-1" # Options: us-phoenix-1, ap-seoul-1, ap-tokyo-1, etc.
+
+# --------------------------------------------------
+# Compartment (REQUIRED)
+# --------------------------------------------------
+# Get via: OCI Console > Identity > Compartments
+compartment_ocid = "ocid1.compartment.oc1..aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# --------------------------------------------------
+# Network Configuration (Optional - defaults provided)
+# --------------------------------------------------
+vcn_cidr_block      = "10.0.0.0/16"
+public_subnet_cidr  = "10.0.1.0/24"
+private_subnet_cidr = "10.0.2.0/24"
+
+# --------------------------------------------------
+# OKE Cluster Configuration (Optional - defaults provided)
+# --------------------------------------------------
+cluster_name       = "truth-protocol-oke-cluster"
+kubernetes_version = "v1.28.2" # Check available versions: oci ce cluster-options get --cluster-option-id all
+oke_endpoint_type  = "PRIVATE" # PRIVATE for production, PUBLIC for testing
+
+# --------------------------------------------------
+# Node Pool Configuration (Optional - adjust based on workload)
+# --------------------------------------------------
+node_pool_size          = 3       # Number of worker nodes (min 1, recommended 3 for HA)
+node_shape              = "VM.Standard.E4.Flex"
+node_ocpus              = 2       # OCPUs per node (flexible shapes only)
+node_memory_gb          = 16      # Memory per node in GB
+node_boot_volume_size_gb = 100    # Boot disk size per node
+
+# --------------------------------------------------
+# Project Metadata (Optional - for tagging)
+# --------------------------------------------------
+project_name = "TRUTH-Protocol"
+environment  = "dev" # Options: dev, staging, prod
+
+# --------------------------------------------------
+# Security & Compliance (Optional - defaults provided)
+# --------------------------------------------------
+enable_pod_security_policy = true  # Enable Kubernetes Pod Security Policy
+enable_network_policy      = true  # Enable Calico Network Policy
+
+# --------------------------------------------------
+# Database Configuration (PostgreSQL) - INF-02
+# --------------------------------------------------
+# CRITICAL: Change the default password before deployment!
+db_system_name   = "truth-protocol-db"
+db_version       = "15"                                    # PostgreSQL version (14, 15, or 16)
+db_name          = "truthprotocol"                         # Initial database name
+db_admin_username = "truthadmin"                           # Database admin username
+db_admin_password = "ChangeMe!SecureP@ssw0rd123"          # MUST be changed! Min 12 chars
+
+# Database Resources (adjust based on workload)
+db_shape          = "PostgreSQL.VM.Standard.E4.Flex.2.32GB" # 2 OCPU, 32GB RAM
+db_instance_count = 1                                       # 1 for dev, 3 for prod HA
+db_ocpu_count     = 2                                       # OCPUs per instance
+db_memory_gb      = 32                                      # Memory per instance in GB
+
+# Database Network (must be within private subnet CIDR)
+db_private_ip = "10.0.2.10"                                # Static private IP for database
+
+# Backup Configuration (INF-02 requirements)
+db_backup_retention_days = 30                              # 30-day backup retention
+db_max_connections       = 200                             # Max concurrent connections
+
+# Monitoring & Alarms (optional)
+# alarm_notification_topic_id = "ocid1.onstopic.oc1.phx.aaaa..." # Uncomment to enable alarms
+
+# --------------------------------------------------
+# Vault & Secrets Configuration (INF-03)
+# --------------------------------------------------
+# CRITICAL SECURITY WARNING:
+# The values below are EXTREMELY SENSITIVE and must NEVER be committed to Git!
+# Use environment variables or OCI Vault for production deployment.
+# --------------------------------------------------
+
+# Vault Names (optional - defaults provided)
+vault_name       = "truth_protocol_hsm_vault"
+master_key_name  = "truth_protocol_master_key"
+
+# CRITICAL: Relayer Private Key (Ethereum/Polygon)
+# Generate with: openssl ecparam -name secp256k1 -genkey -noout -out private.pem && openssl ec -in private.pem -text -noout
+# Or use an existing wallet's private key (WITHOUT 0x prefix)
+relayer_private_key_value = "0000000000000000000000000000000000000000000000000000000000000000"  # REPLACE WITH REAL KEY!
+
+# CRITICAL: Database Password (same as db_admin_password)
+# This will be stored in OCI Vault and accessed by Spring Boot via Instance Principal
+db_admin_password_value = "ChangeMe!SecureP@ssw0rd123"  # MUST match db_admin_password above
+
+# Secret Rotation (optional - disable for dev, enable for prod)
+enable_secret_rotation = false  # Set to true for production
+# rotation_function_id = "ocid1.fnfunc.oc1.phx.aaaa..."  # OCI Function for secret rotation

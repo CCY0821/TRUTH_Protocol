@@ -1,0 +1,374 @@
+# ========================================================================
+# TRUTH Protocol Backend - Spring Boot Application Configuration (BE-01)
+# ========================================================================
+# Task: BE-01 - Spring Boot 3 Backend Initialization
+# Environment: Development (override with application-prod.yml for production)
+# Database: PostgreSQL (INF-02 deployed on OCI Private Subnet)
+# Secrets: OCI Vault (INF-03 for password management)
+# ========================================================================
+
+# ------------------------------------------------------------------------
+# SERVER CONFIGURATION
+# ------------------------------------------------------------------------
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1  # API base path (matches OpenAPI spec)
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: on_param  # Only show stacktrace with ?trace=true
+    include-exception: false
+
+# ------------------------------------------------------------------------
+# SPRING APPLICATION CONFIGURATION
+# ------------------------------------------------------------------------
+
+spring:
+  application:
+    name: truth-protocol-backend
+
+  # ----------------------------------------------------------------------
+  # DATASOURCE CONFIGURATION (INF-02: PostgreSQL on OCI)
+  # ----------------------------------------------------------------------
+  # CRITICAL: Database is deployed in OCI Private Subnet (10.0.2.10)
+  # Only accessible from OKE worker nodes (no public internet access)
+  # ----------------------------------------------------------------------
+
+  datasource:
+    # Database URL (INF-02 output: jdbc:postgresql://<DB_PRIVATE_IP>:5432/<DB_NAME>)
+    url: jdbc:postgresql://10.0.2.10:5432/truthprotocol?ssl=true&sslmode=require
+
+    # Database Username (defined in INF-02 terraform variables)
+    username: truthadmin
+
+    # CRITICAL: Password managed by OCI Vault (INF-03)
+    # ===================================================================
+    # OPTION 1: Environment Variable (Recommended for Development)
+    # Set environment variable: export DB_PASSWORD="YourPassword"
+    # Then reference: ${DB_PASSWORD}
+    # ===================================================================
+    # OPTION 2: OCI Vault via Spring Cloud Vault (Recommended for Production)
+    # Requires: spring-cloud-starter-vault-config dependency
+    # Configuration:
+    #   spring:
+    #     cloud:
+    #       vault:
+    #         uri: <VAULT_CRYPTO_ENDPOINT>
+    #         authentication: KUBERNETES  # or AWS_IAM, APPROLE
+    #         kv:
+    #           enabled: true
+    #           backend: secret
+    #           profile-separator: /
+    # Then reference: ${spring.cloud.vault.kv.secret/db_admin_password}
+    # ===================================================================
+    # OPTION 3: OCI SDK Direct Access (Custom Implementation)
+    # Use VaultService bean to fetch secret on application startup
+    # Example: password: ${oci.vault.secrets.db-password}
+    # This requires custom @ConfigurationProperties bean
+    # ===================================================================
+    password: ${DB_PASSWORD:ChangeMe!SecureP@ssw0rd123}  # Default for local dev
+
+    # Connection Pool Configuration (HikariCP)
+    hikari:
+      maximum-pool-size: 20  # Max connections (adjust based on load)
+      minimum-idle: 5
+      connection-timeout: 30000  # 30 seconds
+      idle-timeout: 600000       # 10 minutes
+      max-lifetime: 1800000      # 30 minutes
+      pool-name: TruthProtocolHikariCP
+
+      # Connection test query (PostgreSQL health check)
+      connection-test-query: SELECT 1
+
+      # Data source properties (PostgreSQL optimizations)
+      data-source-properties:
+        cachePrepStmts: true
+        prepStmtCacheSize: 250
+        prepStmtCacheSqlLimit: 2048
+        useServerPrepStmts: true
+        reWriteBatchedInserts: true
+
+  # ----------------------------------------------------------------------
+  # JPA/HIBERNATE CONFIGURATION (BE-01)
+  # ----------------------------------------------------------------------
+  # CRITICAL: ddl-auto = none (Schema managed by Flyway, not Hibernate)
+  # ----------------------------------------------------------------------
+
+  jpa:
+    # Hibernate DDL Mode: NONE (Flyway manages schema)
+    # DO NOT use 'update' or 'create' in production - use Flyway migrations
+    hibernate:
+      ddl-auto: none
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy
+
+    # Database platform (PostgreSQL dialect)
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+    # JPA Properties
+    properties:
+      hibernate:
+        # SQL Formatting (for development debugging)
+        format_sql: true
+        use_sql_comments: true
+
+        # JDBC Settings
+        jdbc:
+          time_zone: UTC  # Always use UTC for timestamps
+          batch_size: 20  # Batch insert optimization
+
+        # Query Optimization
+        order_inserts: true
+        order_updates: true
+        batch_versioned_data: true
+
+        # Statistics (enable for performance tuning)
+        generate_statistics: false
+
+    # Show SQL in logs (disable in production)
+    show-sql: false
+
+    # Open-in-View (disabled for performance)
+    open-in-view: false
+
+  # ----------------------------------------------------------------------
+  # FLYWAY MIGRATION CONFIGURATION (BE-03)
+  # ----------------------------------------------------------------------
+  # Flyway manages database schema versions (V1__init.sql, V2__..., etc.)
+  # ----------------------------------------------------------------------
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true  # Initialize Flyway metadata if database exists
+    baseline-version: 0
+    locations: classpath:db/migration  # Migration scripts location
+    schemas: public
+    table: flyway_schema_history
+    validate-on-migrate: true
+    clean-disabled: true  # CRITICAL: Prevent accidental data deletion
+
+  # ----------------------------------------------------------------------
+  # BATCH CONFIGURATION (Relayer Worker)
+  # ----------------------------------------------------------------------
+
+  batch:
+    job:
+      enabled: false  # Don't auto-run batch jobs on startup
+    jdbc:
+      initialize-schema: always  # Create Spring Batch metadata tables
+
+# ------------------------------------------------------------------------
+# LOGGING CONFIGURATION
+# ------------------------------------------------------------------------
+
+logging:
+  level:
+    root: INFO
+    com.truthprotocol: DEBUG
+    org.springframework.web: INFO
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG  # Show SQL queries (disable in production)
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE  # Show SQL parameters
+    org.flywaydb: INFO
+    org.springframework.batch: INFO
+
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+  # Log file configuration (optional)
+  file:
+    name: logs/truth-protocol-backend.log
+    max-size: 10MB
+    max-history: 30
+
+# ------------------------------------------------------------------------
+# SPRINGDOC OPENAPI CONFIGURATION (BE-02)
+# ------------------------------------------------------------------------
+
+springdoc:
+  api-docs:
+    path: /api-docs  # OpenAPI JSON spec endpoint
+    enabled: true
+
+  swagger-ui:
+    path: /swagger-ui.html  # Swagger UI endpoint
+    enabled: true
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+    doc-expansion: none  # Collapse all endpoints by default
+
+  # Use the OpenAPI spec file from resources
+  # This allows us to maintain a manually crafted spec (BE-02)
+  # while still generating from code if needed
+  paths-to-match: /api/v1/**
+
+# ------------------------------------------------------------------------
+# ACTUATOR CONFIGURATION (Monitoring & Health Checks)
+# ------------------------------------------------------------------------
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true  # Enable liveness/readiness probes for Kubernetes
+
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+  # Metrics export (for Prometheus/Grafana)
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+# ------------------------------------------------------------------------
+# SECURITY CONFIGURATION (JWT Authentication)
+# ------------------------------------------------------------------------
+
+app:
+  security:
+    jwt:
+      # JWT Secret Key (CRITICAL: Store in OCI Vault for production)
+      # Generate with: openssl rand -base64 64
+      # Minimum length: 32 bytes (256 bits) for HS256 algorithm
+      secret: ${JWT_SECRET:YourSuperSecretKeyThatShouldBeStoredInOCIVaultAndNeverCommittedToGit1234567890==}
+
+      # JWT Token Expiration (milliseconds)
+      # 86400000 ms = 24 hours (recommended for production)
+      # 3600000 ms = 1 hour (recommended for development)
+      expiration: ${JWT_EXPIRATION:86400000}  # 24 hours
+
+      # JWT Issuer (optional, for additional validation)
+      issuer: truth-protocol-api
+
+# ------------------------------------------------------------------------
+# OCI VAULT CONFIGURATION (INF-03: Secrets Management)
+# ------------------------------------------------------------------------
+# This section configures OCI SDK to fetch secrets from OCI Vault
+# using Instance Principal authentication (no credentials needed in code)
+# ------------------------------------------------------------------------
+
+oci:
+  vault:
+    # OCI Compartment OCID (from INF-03 terraform output)
+    compartment-id: ${OCI_COMPARTMENT_OCID:ocid1.compartment.oc1..aaaaaa}
+
+    # OCI Vault OCID (from INF-03 terraform output: vault_id)
+    vault-id: ${OCI_VAULT_ID:ocid1.vault.oc1.phx.aaaaaa}
+
+    # Secret names (from INF-03 terraform output: secret_names)
+    secrets:
+      relayer-private-key: relayer_private_key
+      db-password: db_admin_password
+
+  # Instance Principal Authentication (enabled when running in OKE)
+  # No need to configure credentials - OCI SDK will automatically
+  # use the OKE worker node's identity (Dynamic Group from INF-03)
+  config:
+    instance-principal:
+      enabled: true
+
+
+  # Relayer Worker Configuration
+  relayer:
+    # Polygon PoS RPC endpoint
+    rpc-url: ${POLYGON_RPC_URL:https://polygon-rpc.com}
+
+    # Chain ID (137 for Polygon Mainnet, 80001 for Mumbai Testnet)
+    chain-id: ${POLYGON_CHAIN_ID:80001}
+
+    # Contract addresses (deployed smart contracts)
+    contract:
+      identity: ${IDENTITY_CONTRACT_ADDRESS:0x}
+      sbt: ${SBT_CONTRACT_ADDRESS:0x}
+
+  # Arweave Configuration (permanent storage)
+  arweave:
+    gateway-url: https://arweave.net
+    timeout: 30000  # 30 seconds
+
+  # Credits System
+  credits:
+    cost-per-mint: 1.00  # Cost in credits to mint 1 SBT
+
+# ------------------------------------------------------------------------
+# PROFILE-SPECIFIC CONFIGURATION
+# ------------------------------------------------------------------------
+# Use application-{profile}.yml for environment-specific overrides:
+#   - application-dev.yml (local development)
+#   - application-staging.yml (staging environment)
+#   - application-prod.yml (production environment)
+#
+# Activate profile with: --spring.profiles.active=prod
+# Or environment variable: SPRING_PROFILES_ACTIVE=prod
+# ------------------------------------------------------------------------
+
+---
+# ========================================================================
+# DEVELOPMENT PROFILE (spring.profiles.active=dev)
+# ========================================================================
+
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  # Development-specific overrides
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        generate_statistics: true
+
+logging:
+  level:
+    root: DEBUG
+    org.hibernate.SQL: DEBUG
+
+---
+# ========================================================================
+# PRODUCTION PROFILE (spring.profiles.active=prod)
+# ========================================================================
+
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  # Production-specific overrides
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        generate_statistics: false
+
+logging:
+  level:
+    root: WARN
+    com.truthprotocol: INFO
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN
+
+# Disable Swagger UI in production (security)
+springdoc:
+  swagger-ui:
+    enabled: false

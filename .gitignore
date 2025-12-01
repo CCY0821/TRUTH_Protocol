@@ -1,0 +1,47 @@
+# Build artifacts
+build/
+target/
+*.jar
+*.war
+*.ear
+*.class
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+
+# Gradle
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+*.env
+
+# Database
+*.db
+
+# OS
+Thumbs.db
+
+# Node modules (if any frontend)
+node_modules/
+
+# Maven
+.mvn/
+
+# Temp files
+*.tmp
+*.bak
+*.swp
+*~.nib

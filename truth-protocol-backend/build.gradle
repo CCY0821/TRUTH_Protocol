@@ -1,0 +1,318 @@
+// ========================================================================
+// TRUTH Protocol Backend - Gradle Build Configuration (BE-01)
+// ========================================================================
+// Task: BE-01 - Spring Boot 3 Backend Initialization
+// Language: Java 21+
+// Build Tool: Gradle 8.x (Groovy DSL)
+// Framework: Spring Boot 3.2.x
+// Database: PostgreSQL 15+ (with Flyway Migration)
+// Security: Spring Security (JWT Authentication)
+// Cloud: OCI (Vault/Secrets Integration)
+// ========================================================================
+
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.1'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'jacoco'  // Code coverage for testing
+}
+
+group = 'com.truthprotocol'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+// ========================================================================
+// DEPENDENCY VERSIONS (Centralized Version Management)
+// ========================================================================
+
+ext {
+    // Spring Boot 3.2.x automatically manages most versions via BOM
+    springBootVersion = '3.2.1'
+
+    // OCI SDK Version (for Vault/Secrets access)
+    ociSdkVersion = '3.35.0'
+
+    // OpenAPI/Swagger Version (BE-02 API Documentation)
+    springdocVersion = '2.3.0'
+
+    // Testing Frameworks
+    testcontainersVersion = '1.19.3'
+
+    // Spring Batch (for Relayer Worker async processing)
+    springBatchVersion = '5.1.0'
+}
+
+dependencies {
+    // ====================================================================
+    // SPRING BOOT CORE DEPENDENCIES (BE-01)
+    // ====================================================================
+
+    // Spring Boot Web (RESTful API)
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // Spring Boot Validation (for request validation)
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // Spring Boot Actuator (health checks, metrics)
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // ====================================================================
+    // DATABASE & PERSISTENCE (INF-02, BE-03)
+    // ====================================================================
+
+    // Spring Data JPA (Hibernate)
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // PostgreSQL Driver
+    runtimeOnly 'org.postgresql:postgresql'
+
+    // Flyway Migration (BE-03: Database Schema Version Control)
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+
+    // ====================================================================
+    // SECURITY (JWT Authentication)
+    // ====================================================================
+
+    // Spring Security
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // JWT Library (for token generation & validation)
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'
+
+    // ====================================================================
+    // API DOCUMENTATION (BE-02)
+    // ====================================================================
+
+    // SpringDoc OpenAPI 3 (Swagger UI)
+    implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+
+    // ====================================================================
+    // OCI CLOUD INTEGRATION (INF-03: Vault/Secrets)
+    // ====================================================================
+
+    // OCI Java SDK - Secrets Management
+    implementation "com.oracle.oci.sdk:oci-java-sdk-secrets:${ociSdkVersion}"
+
+    // OCI Java SDK - Common (required for Instance Principal authentication)
+    implementation "com.oracle.oci.sdk:oci-java-sdk-common:${ociSdkVersion}"
+
+    // OCI Java SDK - Vault (for key management)
+    implementation "com.oracle.oci.sdk:oci-java-sdk-vault:${ociSdkVersion}"
+
+    // Bouncy Castle (required by OCI SDK for cryptographic operations)
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.77'
+
+    // ====================================================================
+    // ASYNC PROCESSING (Relayer Worker)
+    // ====================================================================
+
+    // Spring Batch (for async credential minting jobs)
+    implementation 'org.springframework.boot:spring-boot-starter-batch'
+
+    // Spring Integration (optional, for advanced message routing)
+    // implementation 'org.springframework.boot:spring-boot-starter-integration'
+
+    // ====================================================================
+    // UTILITIES & CODE QUALITY
+    // ====================================================================
+
+    // Lombok (reduce boilerplate code)
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // MapStruct (for DTO mapping, optional but recommended)
+    // implementation 'org.mapstruct:mapstruct:1.5.5.Final'
+    // annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
+
+    // Jackson (JSON processing - included in Spring Boot by default)
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
+    // Apache Commons Lang (utility functions)
+    implementation 'org.apache.commons:commons-lang3'
+
+    // ====================================================================
+    // WEB3/BLOCKCHAIN INTEGRATION (for future Relayer Worker)
+    // ====================================================================
+
+    // Web3j (Ethereum/Polygon interaction)
+    implementation 'org.web3j:core:4.10.3'
+
+    // ====================================================================
+    // DEVELOPMENT TOOLS
+    // ====================================================================
+
+    // Spring Boot DevTools (hot reload during development)
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+    // Spring Boot Configuration Processor (for application.yml autocomplete)
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // ====================================================================
+    // TESTING DEPENDENCIES
+    // ====================================================================
+
+    // Spring Boot Test (includes JUnit 5, Mockito, AssertJ, etc.)
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    // Spring Security Test
+    testImplementation 'org.springframework.security:spring-security-test'
+
+    // Spring Batch Test
+    testImplementation 'org.springframework.batch:spring-batch-test'
+
+    // Testcontainers (for integration testing with real PostgreSQL)
+    testImplementation "org.testcontainers:testcontainers:${testcontainersVersion}"
+    testImplementation "org.testcontainers:postgresql:${testcontainersVersion}"
+    testImplementation "org.testcontainers:junit-jupiter:${testcontainersVersion}"
+
+    // H2 Database (optional, for lightweight unit tests)
+    testRuntimeOnly 'com.h2database:h2'
+
+    // REST Assured (for API integration testing)
+    testImplementation 'io.rest-assured:rest-assured:5.4.0'
+}
+
+// ========================================================================
+// GRADLE TASKS CONFIGURATION
+// ========================================================================
+
+tasks.named('test') {
+    useJUnitPlatform()
+
+    // Enable JaCoCo code coverage
+    finalizedBy jacocoTestReport
+
+    // Configure test execution
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showStandardStreams = false
+    }
+}
+
+// JaCoCo Code Coverage Report
+jacocoTestReport {
+    dependsOn test
+
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+
+    // Exclude generated code from coverage
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                '**/config/**',
+                '**/entity/**',
+                '**/dto/**',
+                '**/*Application.class'
+            ])
+        }))
+    }
+}
+
+// Enforce minimum code coverage (optional)
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                minimum = 0.70  // 70% coverage minimum
+            }
+        }
+    }
+}
+
+// ========================================================================
+// SPRING BOOT CONFIGURATION
+// ========================================================================
+
+springBoot {
+    mainClass = 'com.truthprotocol.TruthProtocolApplication'
+
+    // Build information (accessible via Actuator /info endpoint)
+    buildInfo()
+}
+
+// ========================================================================
+// JAVA COMPILER OPTIONS
+// ========================================================================
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += [
+        '-parameters',  // Required for Spring parameter name discovery
+        '-Xlint:unchecked',
+        '-Xlint:deprecation'
+    ]
+}
+
+// ========================================================================
+// BOOTJAR CONFIGURATION (Production Build)
+// ========================================================================
+
+tasks.named('bootJar') {
+    archiveFileName = 'truth-protocol-backend.jar'
+
+    // Enable layer extraction (for Docker multi-stage builds)
+    layered {
+        enabled = true
+    }
+}
+
+// ========================================================================
+// CUSTOM TASKS
+// ========================================================================
+
+// Task: Generate OpenAPI spec from code (optional)
+task generateOpenApiSpec(type: JavaExec) {
+    group = 'documentation'
+    description = 'Generates OpenAPI 3.0 spec from Spring controllers'
+
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.springdoc.openapi.gradle.plugin.OpenApiGeneratorTask'
+}
+
+// Task: Run Flyway migrations manually (useful for CI/CD)
+task flywayMigrate(type: JavaExec) {
+    group = 'database'
+    description = 'Run Flyway database migrations'
+
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.springframework.boot.loader.JarLauncher'
+    args = ['--spring.flyway.enabled=true']
+}
+
+// ========================================================================
+// BUILD METADATA
+// ========================================================================
+
+println """
+========================================================================
+TRUTH Protocol Backend Build Configuration
+========================================================================
+Java Version:        ${java.sourceCompatibility}
+Spring Boot Version: ${springBootVersion}
+OCI SDK Version:     ${ociSdkVersion}
+Build Time:          ${new Date().format('yyyy-MM-dd HH:mm:ss')}
+========================================================================
+"""
