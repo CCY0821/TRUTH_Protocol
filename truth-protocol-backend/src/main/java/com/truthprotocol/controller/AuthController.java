@@ -142,25 +142,15 @@ public class AuthController {
     }
 
     /**
-     * User registration endpoint (optional)
+     * User registration endpoint
      *
      * Creates a new user account with hashed password.
      *
      * Endpoint: POST /api/v1/auth/register
      * Access: Public (no authentication required)
-     *
-     * Implementation Note:
-     * - Uncomment this method if registration is required
-     * - Ensure proper validation and error handling
-     * - Consider email verification workflow
-     * - Implement CAPTCHA to prevent bot registrations
-     *
-     * @param request Registration details (email, password, etc.)
-     * @return Success message or error
      */
-    /*
     @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<?> register(@Valid @RequestBody com.truthprotocol.dto.RegisterRequest request) {
         try {
             User newUser = User.builder()
                 .email(request.getEmail())
@@ -178,8 +168,7 @@ public class AuthController {
                 .body("Email already registered.");
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("An error occurred during registration.");
+                .body("An error occurred during registration: " + e.getMessage());
         }
     }
-    */
 }
