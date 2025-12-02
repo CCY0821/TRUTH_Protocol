@@ -118,61 +118,10 @@ public class ConfirmationService {
     // ========================================================================
 
     /**
-     * Process PENDING credentials (scheduled task)
+     * Process PENDING credentials (scheduled task).
      *
-     * Periodically checks all PENDING credentials for blockchain confirmation.
-     *
-     * Schedule Configuration:
-     * - fixedRate = 60000 ms (60 seconds)
-     * - Runs every 60 seconds regardless of previous execution time
-     * - If previous execution takes >60s, next execution waits
-     *
-     * Alternative Scheduling Options:
-     * - fixedDelay: Wait N ms after previous execution completes
-     * - cron: Use cron expression for more complex scheduling
-     * - Example: @Scheduled(cron = "0 */1 * * * *") // Every minute
-     *
-     * Processing Flow:
-     * 1. Fetch all PENDING credentials with txHash
-     * 2. For each credential:
-     *    a. Check transaction confirmation status
-     *    b. Extract tokenId from contract event
-     *    c. Update credential status (CONFIRMED or FAILED)
-     * 3. Log processing statistics
-     *
-     * Execution Example:
-     * <pre>
-     * [2024-12-01 15:30:00] Processing PENDING credentials...
-     * [2024-12-01 15:30:00] Found 5 PENDING credentials
-     * [2024-12-01 15:30:01] ✓ Credential abc123 confirmed, tokenId=42
-     * [2024-12-01 15:30:02] ✓ Credential def456 confirmed, tokenId=43
-     * [2024-12-01 15:30:03] ⏳ Credential ghi789 still pending
-     * [2024-12-01 15:30:04] ✗ Credential jkl012 failed
-     * [2024-12-01 15:30:05] ⏳ Credential mno345 still pending
-     * [2024-12-01 15:30:05] Completed: 2 confirmed, 1 failed, 2 pending
-     * </pre>
-     *
-     * Performance:
-     * - Typical execution: 1-10 seconds
-     * - Max execution: 60 seconds (should not exceed fixedRate)
-     * - If execution time > 60s, consider optimizations:
-     *   - Parallel processing
-     *   - Batch RPC calls
-     *   - Reduce PENDING queue size
-     *
-     * Thread Safety:
-     * - Scheduled methods are executed by a single thread by default
-     * - No concurrent execution of same method
-     * - Can be made concurrent by configuring thread pool
-     *
-     * Configuration (application.yml):
-     * <pre>
-     * spring:
-     *   task:
-     *     scheduling:
-     *       pool:
-     *         size: 2  # Thread pool size for scheduled tasks
-     * </pre>
+     * Runs every 60 seconds to check blockchain confirmation status for PENDING credentials.
+     * For each confirmed transaction, extracts the tokenId and updates credential status.
      */
     @Scheduled(fixedRate = 60000)  // Execute every 60 seconds
     @Transactional
