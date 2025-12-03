@@ -84,7 +84,7 @@ dependencies {
     runtimeOnly 'org.postgresql:postgresql'
 
     // Flyway Migration (BE-03: Database Schema Version Control)
-    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-core:10.4.1'
     runtimeOnly 'org.flywaydb:flyway-database-postgresql:10.4.1'
 
     // ====================================================================

@@ -1,0 +1,30 @@
+# ========================================================================
+# DEVELOPMENT PROFILE (spring.profiles.active=dev) - 本地開發環境配置
+# ========================================================================
+
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  # ----------------------------------------------------------------------
+  # 【關鍵覆蓋】本地 PostgreSQL 連線配置 (覆蓋 application.yml 中的 OCI 配置)
+  # ----------------------------------------------------------------------
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres  # 連接本地 DB
+    username: postgres                             # 使用本地超級用戶
+    password: 55662211@@@                          # 剛剛設定的密碼
+    # 其他 Hikari 設定可以沿用或在此覆蓋
+
+  # Development-specific overrides
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        generate_statistics: true
+
+logging:
+  level:
+    root: DEBUG
+    org.hibernate.SQL: DEBUG

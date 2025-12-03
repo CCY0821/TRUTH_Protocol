@@ -45,3 +45,12 @@ node_modules/
 *.bak
 *.swp
 *~.nib
+
+# Eclipse/Gradle bin
+bin/
+
+# Startup logs
+startup.log
+
+# Misc
+amp

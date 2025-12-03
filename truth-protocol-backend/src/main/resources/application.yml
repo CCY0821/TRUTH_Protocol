@@ -14,7 +14,7 @@
 server:
   port: 8080
   servlet:
-    context-path: /api/v1  # API base path (matches OpenAPI spec)
+    context-path: /  # Root context path (controllers define /api/v1 prefix)
   error:
     include-message: always
     include-binding-errors: always
@@ -259,6 +259,19 @@ app:
       # JWT Issuer (optional, for additional validation)
       issuer: truth-protocol-api
 
+  # Relayer Worker Configuration
+  relayer:
+    # Polygon PoS RPC endpoint
+    rpc-url: ${POLYGON_RPC_URL:https://polygon-rpc.com}
+
+    # Chain ID (137 for Polygon Mainnet, 80001 for Mumbai Testnet)
+    chain-id: ${POLYGON_CHAIN_ID:80001}
+
+    # Contract addresses (deployed smart contracts)
+    contract:
+      identity: ${IDENTITY_CONTRACT_ADDRESS:0x}
+      sbt: ${SBT_CONTRACT_ADDRESS:0x}
+
 # ------------------------------------------------------------------------
 # OCI VAULT CONFIGURATION (INF-03: Secrets Management)
 # ------------------------------------------------------------------------
@@ -286,20 +299,6 @@ oci:
     instance-principal:
       enabled: true
 
-
-  # Relayer Worker Configuration
-  relayer:
-    # Polygon PoS RPC endpoint
-    rpc-url: ${POLYGON_RPC_URL:https://polygon-rpc.com}
-
-    # Chain ID (137 for Polygon Mainnet, 80001 for Mumbai Testnet)
-    chain-id: ${POLYGON_CHAIN_ID:80001}
-
-    # Contract addresses (deployed smart contracts)
-    contract:
-      identity: ${IDENTITY_CONTRACT_ADDRESS:0x}
-      sbt: ${SBT_CONTRACT_ADDRESS:0x}
-
   # Arweave Configuration (permanent storage)
   arweave:
     gateway-url: https://arweave.net
@@ -320,55 +319,3 @@ oci:
 # Activate profile with: --spring.profiles.active=prod
 # Or environment variable: SPRING_PROFILES_ACTIVE=prod
 # ------------------------------------------------------------------------
-
----
-# ========================================================================
-# DEVELOPMENT PROFILE (spring.profiles.active=dev)
-# ========================================================================
-
-spring:
-  config:
-    activate:
-      on-profile: dev
-
-  # Development-specific overrides
-  jpa:
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-        generate_statistics: true
-
-logging:
-  level:
-    root: DEBUG
-    org.hibernate.SQL: DEBUG
-
----
-# ========================================================================
-# PRODUCTION PROFILE (spring.profiles.active=prod)
-# ========================================================================
-
-spring:
-  config:
-    activate:
-      on-profile: prod
-
-  # Production-specific overrides
-  jpa:
-    show-sql: false
-    properties:
-      hibernate:
-        generate_statistics: false
-
-logging:
-  level:
-    root: WARN
-    com.truthprotocol: INFO
-    org.springframework.web: WARN
-    org.hibernate.SQL: WARN
-
-# Disable Swagger UI in production (security)
-springdoc:
-  swagger-ui:
-    enabled: false

@@ -1,0 +1,27 @@
+# ========================================================================
+# PRODUCTION PROFILE (spring.profiles.active=prod)
+# ========================================================================
+
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  # Production-specific overrides
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        generate_statistics: false
+
+logging:
+  level:
+    root: WARN
+    com.truthprotocol: INFO
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN
+
+# Disable Swagger UI in production (security)
+springdoc:
+  swagger-ui:
+    enabled: false
