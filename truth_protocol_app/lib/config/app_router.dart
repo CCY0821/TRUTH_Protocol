@@ -7,6 +7,7 @@ import 'package:truth_protocol_app/presentation/dashboard/dashboard_screen.dart'
 import 'package:truth_protocol_app/presentation/minting/minting_screen.dart';
 import 'package:truth_protocol_app/presentation/history/history_screen.dart';
 import 'package:truth_protocol_app/presentation/history/credential_detail_screen.dart';
+import 'package:truth_protocol_app/presentation/verifier/verifier_screen.dart';
 
 part 'app_router.g.dart';
 
@@ -60,6 +61,10 @@ GoRouter appRouter(AppRouterRef ref) {
           final id = state.pathParameters['id']!;
           return CredentialDetailScreen(credentialId: id);
         },
+      ),
+      GoRoute(
+        path: '/verify',
+        builder: (context, state) => const VerifierScreen(),
       ),
     ],
   );

@@ -57,7 +57,8 @@ dependencies:
   google_fonts: ^6.2.1
   flutter_svg: ^2.0.10
   qr_flutter: ^4.1.0
-  
+  mobile_scanner: ^5.2.3
+
   # Note: NO Web3 dependencies required for Issuer App
 
   cupertino_icons: ^1.0.6

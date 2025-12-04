@@ -47,4 +47,13 @@ class CredentialRemoteDataSource {
       rethrow;
     }
   }
+
+  Future<Credential> verifyCredentialByTokenId(String tokenId) async {
+    try {
+      final response = await _dio.get('/credentials/verify/$tokenId');
+      return Credential.fromJson(response.data);
+    } catch (e) {
+      rethrow;
+    }
+  }
 }

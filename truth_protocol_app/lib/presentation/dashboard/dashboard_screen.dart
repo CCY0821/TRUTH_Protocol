@@ -145,6 +145,18 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   FilledButton.icon(
+                    onPressed: () {
+                      context.push('/verify');
+                    },
+                    icon: const Icon(Icons.qr_code_scanner),
+                    label: const Text('Verify Credential'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Colors.green[600],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
                     onPressed: user.credits > 0
                         ? () {
                             context.push('/mint');
