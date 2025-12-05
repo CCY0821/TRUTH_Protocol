@@ -9,6 +9,7 @@ package com.truthprotocol;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * TRUTH Protocol Backend Application.
@@ -27,6 +28,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * - Property binding
  */
 @SpringBootApplication
+@EnableScheduling
 public class TruthProtocolApplication {
 
     /**

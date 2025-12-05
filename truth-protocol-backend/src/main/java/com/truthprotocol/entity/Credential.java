@@ -8,6 +8,7 @@
 
 package com.truthprotocol.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -108,6 +109,7 @@ public class Credential {
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "issuer_id", nullable = false, foreignKey = @ForeignKey(name = "credentials_issuer_fk"))
+    @JsonIgnore  // Prevent lazy loading issues during serialization
     private User issuer;
 
     // ========================================================================

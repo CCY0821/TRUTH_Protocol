@@ -261,11 +261,17 @@ app:
 
   # Relayer Worker Configuration
   relayer:
+    # Mode: mock | real
+    mode: ${RELAYER_MODE:mock}
+    
     # Polygon PoS RPC endpoint
     rpc-url: ${POLYGON_RPC_URL:https://polygon-rpc.com}
 
     # Chain ID (137 for Polygon Mainnet, 80001 for Mumbai Testnet)
     chain-id: ${POLYGON_CHAIN_ID:80001}
+    
+    # Relayer Private Key (from OCI Vault in production)
+    private-key: ${RELAYER_PRIVATE_KEY:}
 
     # Contract addresses (deployed smart contracts)
     contract:
@@ -301,8 +307,22 @@ oci:
 
   # Arweave Configuration (permanent storage)
   arweave:
-    gateway-url: https://arweave.net
-    timeout: 30000  # 30 seconds
+    # Upload mode: mock (for development) or real (for production)
+    mode: ${ARWEAVE_MODE:mock}
+    
+    # Arweave gateway URL
+    gateway-url: ${ARWEAVE_GATEWAY_URL:https://arweave.net}
+    
+    # Request timeout (milliseconds)
+    timeout: ${ARWEAVE_TIMEOUT:30000}  # 30 seconds
+    
+    # Max retry attempts for failed uploads
+    max-retries: ${ARWEAVE_MAX_RETRIES:3}
+    
+    # Arweave wallet JWK (JSON Web Key)
+    # CRITICAL: Store in OCI Vault for production
+    # For development: set via environment variable ARWEAVE_WALLET_JWK
+    wallet-jwk: ${ARWEAVE_WALLET_JWK:}
 
   # Credits System
   credits:

@@ -174,4 +174,15 @@ public interface CredentialRepository extends JpaRepository<Credential, UUID> {
      * @return Credential if found, null otherwise
      */
     Credential findByTokenId(BigInteger tokenId);
+
+    /**
+     * Find credentials by status
+     *
+     * Retrieves credentials with a specific status.
+     * Used by Relayer Worker to find QUEUED credentials for processing.
+     *
+     * @param status Credential status (e.g., QUEUED)
+     * @return List of credentials matching the status
+     */
+    List<Credential> findByStatus(CredentialStatus status);
 }

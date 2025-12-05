@@ -159,6 +159,16 @@ dependencies {
     implementation 'org.web3j:core:4.10.3'
 
     // ====================================================================
+    // ARWEAVE INTEGRATION
+    // ====================================================================
+
+    // OkHttp (for Arweave HTTP API requests)
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // Bouncy Castle (for cryptographic operations - Arweave signing)
+    // Already included via OCI SDK dependencies
+
+    // ====================================================================
     // DEVELOPMENT TOOLS
     // ====================================================================
 

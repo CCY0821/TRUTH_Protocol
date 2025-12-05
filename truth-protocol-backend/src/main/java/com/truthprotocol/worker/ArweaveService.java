@@ -9,14 +9,20 @@ package com.truthprotocol.worker;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.PostConstruct;
+import okhttp3.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Arweave Service
@@ -75,6 +81,12 @@ public class ArweaveService {
     // ========================================================================
 
     /**
+     * Arweave upload mode: mock or real
+     */
+    @Value("${app.arweave.mode:mock}")
+    private String uploadMode;
+
+    /**
      * Arweave Gateway URL
      *
      * Gateway endpoints:
@@ -100,17 +112,27 @@ public class ArweaveService {
     private int timeoutMs;
 
     /**
-     * WebClient for HTTP requests
-     *
-     * Why WebClient:
-     * - Modern Spring WebFlux reactive client
-     * - Non-blocking I/O (better for high concurrency)
-     * - Built-in timeout and retry support
-     * - Better than RestTemplate (deprecated in Spring 6+)
-     *
-     * Alternative: Apache HttpClient, OkHttp, or Java 11+ HttpClient
+     * Max retry attempts for failed uploads
+     */
+    @Value("${app.arweave.max-retries:3}")
+    private int maxRetries;
+
+    /**
+     * Arweave wallet JWK (JSON Web Key)
+     * Required for real uploads
+     */
+    @Value("${app.arweave.wallet-jwk:}")
+    private String walletJwk;
+
+    /**
+     * WebClient for HTTP requests (kept for backward compatibility)
      */
     private WebClient webClient;
+
+    /**
+     * OkHttp client for Arweave uploads
+     */
+    private OkHttpClient httpClient;
 
     /**
      * ObjectMapper for JSON serialization
@@ -140,15 +162,29 @@ public class ArweaveService {
      */
     @PostConstruct
     public void init() {
+        // Initialize WebClient (backward compatibility)
         this.webClient = WebClient.builder()
             .baseUrl(gatewayUrl)
             .defaultHeader("Content-Type", "application/json")
             .defaultHeader("Accept", "application/json")
             .build();
 
-        System.out.println("Arweave Service initialized");
+        // Initialize OkHttp client for real uploads
+        this.httpClient = new OkHttpClient.Builder()
+            .connectTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+            .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+            .writeTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+            .build();
+
+        System.out.println("========================================");
+        System.out.println("Arweave Service Initialized");
+        System.out.println("========================================");
+        System.out.println("Mode: " + uploadMode);
         System.out.println("Gateway URL: " + gatewayUrl);
         System.out.println("Timeout: " + timeoutMs + "ms");
+        System.out.println("Max Retries: " + maxRetries);
+        System.out.println("Wallet Configured: " + (!walletJwk.isEmpty() ? "Yes" : "No (Mock mode only)"));
+        System.out.println("========================================");
     }
 
     // ========================================================================
@@ -252,13 +288,32 @@ public class ArweaveService {
      * @throws RuntimeException if upload fails (in production, throw ArweaveUploadException)
      */
     public String uploadMetadata(JsonNode metadata) {
-        try {
-            System.out.println("Uploading metadata to Arweave...");
+        System.out.println("[Arweave] Starting upload - Mode: " + uploadMode);
 
+        try {
             // Log metadata size for monitoring
             String metadataJson = objectMapper.writeValueAsString(metadata);
             int dataSize = metadataJson.getBytes().length;
-            System.out.println("Metadata size: " + dataSize + " bytes");
+            System.out.println("[Arweave] Metadata size: " + dataSize + " bytes");
+
+            // Choose upload method based on mode
+            if ("real".equalsIgnoreCase(uploadMode)) {
+                return uploadMetadataReal(metadata);
+            } else {
+                return uploadMetadataMock(metadata);
+            }
+
+        } catch (Exception e) {
+            System.err.println("[Arweave] Upload failed: " + e.getMessage());
+            throw new RuntimeException("Failed to upload metadata to Arweave", e);
+        }
+    }
+
+    /**
+     * Mock upload implementation (for development/testing)
+     */
+    private String uploadMetadataMock(JsonNode metadata) throws Exception {
+        System.out.println("[Arweave] Using MOCK upload");
 
             // ================================================================
             // PRODUCTION IMPLEMENTATION (TODO)
@@ -302,60 +357,120 @@ public class ArweaveService {
             //
             // ================================================================
 
-            // ================================================================
-            // MOCK IMPLEMENTATION (Current)
-            // ================================================================
-            //
-            // Simulate network delay for realistic testing
-            // In production, this represents:
-            // - Network latency (50-200ms)
-            // - Gateway processing (200-500ms)
-            // - Transaction creation (100-300ms)
-            // - Total: 350-1000ms typical, up to 5s worst case
-            //
-            // For testing, we use a shorter delay (500-2000ms)
-            //
-            long delayMs = 500 + (long) (Math.random() * 1500);  // 500-2000ms
-            System.out.println("Simulating Arweave upload delay: " + delayMs + "ms");
-            Thread.sleep(delayMs);
+        // Simulate network delay for realistic testing
+        long delayMs = 500 + (long) (Math.random() * 1500);  // 500-2000ms
+        System.out.println("[Arweave] Simulating upload delay: " + delayMs + "ms");
+        Thread.sleep(delayMs);
 
-            // Generate mock Arweave hash
-            // Format: ar-hash-TRUTH-{UUID}
-            // This format is easily identifiable as mock data
-            String mockHash = "ar-hash-TRUTH-" + UUID.randomUUID().toString();
+        // Generate mock Arweave hash
+        String mockHash = "ar-hash-TRUTH-" + UUID.randomUUID().toString();
+        System.out.println("[Arweave] Mock upload successful");
+        System.out.println("[Arweave] Mock hash: " + mockHash);
 
-            System.out.println("Arweave upload successful (mock)");
-            System.out.println("Arweave hash: " + mockHash);
+        return mockHash;
+    }
 
-            return mockHash;
+    /**
+     * Real Arweave upload implementation
+     *
+     * Uploads data to Arweave network using HTTP API with retry logic
+     */
+    private String uploadMetadataReal(JsonNode metadata) throws Exception {
+        System.out.println("[Arweave] Using REAL upload to Arweave network");
 
-            // ================================================================
-            // END MOCK IMPLEMENTATION
-            // ================================================================
+        // Validate wallet is configured
+        if (walletJwk == null || walletJwk.isEmpty()) {
+            throw new IllegalStateException(
+                "Arweave wallet not configured. Set ARWEAVE_WALLET_JWK environment variable or use mock mode."
+            );
+        }
 
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Arweave upload interrupted", e);
+        // Convert metadata to bytes
+        String metadataJson = objectMapper.writeValueAsString(metadata);
+        byte[] data = metadataJson.getBytes(StandardCharsets.UTF_8);
 
-        } catch (Exception e) {
-            System.err.println("Failed to upload metadata to Arweave: " + e.getMessage());
+        // Try upload with retries
+        Exception lastException = null;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                System.out.println("[Arweave] Upload attempt " + attempt + "/" + maxRetries);
+                return performArweaveUpload(data);
+            } catch (Exception e) {
+                lastException = e;
+                System.err.println("[Arweave] Attempt " + attempt + " failed: " + e.getMessage());
+                
+                if (attempt < maxRetries) {
+                    // Exponential backoff
+                    long backoffMs = (long) Math.pow(2, attempt) * 1000;
+                    System.out.println("[Arweave] Retrying in " + backoffMs + "ms...");
+                    Thread.sleep(backoffMs);
+                }
+            }
+        }
 
-            // In production, throw custom exception:
-            // throw new ArweaveUploadException("Failed to upload metadata", e);
-            //
-            // Custom exception class (to be created):
-            // public class ArweaveUploadException extends RuntimeException {
-            //     public ArweaveUploadException(String message, Throwable cause) {
-            //         super(message, cause);
-            //     }
-            // }
-            //
-            // This allows ItemProcessor to:
-            // - Catch and retry (for transient network errors)
-            // - Mark credential as FAILED (for permanent errors)
-            // - Log error details for debugging
+        throw new RuntimeException(
+            "Arweave upload failed after " + maxRetries + " attempts", 
+            lastException
+        );
+    }
 
-            throw new RuntimeException("Failed to upload metadata to Arweave", e);
+    /**
+     * Perform actual HTTP upload to Arweave
+     *
+     * NOTE: This is a simplified implementation.
+     * Production version should:
+     * - Load wallet JWK properly
+     * - Sign transaction with wallet private key
+     * - Calculate reward (fee) based on data size
+     * - Create proper Arweave transaction structure
+     */
+    private String performArweaveUpload(byte[] data) throws IOException {
+        // Encode data as base64 (Arweave requirement)
+        String base64Data = Base64.getEncoder().encodeToString(data);
+
+        // Create transaction request
+        // NOTE: This is simplified - real implementation needs wallet signing
+        ObjectNode transactionJson = objectMapper.createObjectNode();
+        transactionJson.put("data", base64Data);
+        
+        // Add tags
+        transactionJson.putArray("tags")
+            .add(objectMapper.createObjectNode()
+                .put("name", "Content-Type")
+                .put("value", "application/json"))
+            .add(objectMapper.createObjectNode()
+                .put("name", "App-Name")
+                .put("value", "TRUTH-Protocol"));
+
+        String requestBody = objectMapper.writeValueAsString(transactionJson);
+
+        // Build HTTP request
+        Request request = new Request.Builder()
+            .url(gatewayUrl + "/tx")
+            .post(RequestBody.create(
+                requestBody,
+                MediaType.parse("application/json")
+            ))
+            .addHeader("Content-Type", "application/json")
+            .build();
+
+        // Execute request
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("Arweave upload failed: HTTP " + response.code() + " - " + response.message());
+            }
+
+            // Parse response
+            String responseBody = response.body().string();
+            System.out.println("[Arweave] Response: " + responseBody);
+
+            JsonNode responseJson = objectMapper.readTree(responseBody);
+            String txId = responseJson.get("id").asText();
+
+            System.out.println("[Arweave] Upload successful!");
+            System.out.println("[Arweave] Transaction ID: " + txId);
+
+            return txId;
         }
     }
 
