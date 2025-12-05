@@ -16,6 +16,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -130,20 +132,8 @@ public class CredentialController {
     @Transactional
     public ResponseEntity<?> mintCredential(@Valid @RequestBody MintRequest request) {
         try {
-            // Step 1: Extract current user ID from SecurityContext
-            //
-            // TODO: Implement proper JWT authentication and extract user ID
-            //
-            // Option 1: Extract from JWT claims in SecurityContext
-            // Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            // UUID currentUserId = UUID.fromString(authentication.getName());
-            //
-            // Option 2: Use custom UserPrincipal object
-            // UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
-            // UUID currentUserId = principal.getUserId();
-            //
-            // For now, using a mock user ID (replace with actual implementation)
-            UUID currentUserId = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+            // Step 1: Extract current user ID from JWT token in SecurityContext
+            UUID currentUserId = getCurrentUserId();
 
             // Step 2: Check and deduct credits (pessimistic lock ensures atomicity)
             // Cost per mint: 1.00 credit (configurable in application.yml)
@@ -193,8 +183,8 @@ public class CredentialController {
     @PreAuthorize("hasAuthority('ISSUER')")
     public ResponseEntity<?> getMyIssuedCredentials() {
         try {
-            // TODO: Extract user ID from JWT
-            UUID currentUserId = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+            // Extract user ID from JWT token in SecurityContext
+            UUID currentUserId = getCurrentUserId();
 
             List<Credential> credentials = credentialService.getCredentialsByIssuer(currentUserId);
             return ResponseEntity.ok(credentials);
@@ -215,11 +205,11 @@ public class CredentialController {
     @GetMapping("/holder")
     public ResponseEntity<?> getMyHeldCredentials() {
         try {
-            // TODO: Extract user ID from JWT and get their wallet address
-            // For now, return empty list or mock data
-            UUID currentUserId = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+            // Extract user ID from JWT token in SecurityContext
+            UUID currentUserId = getCurrentUserId();
 
-            // TODO: Implement service method to get credentials by recipient address
+            // TODO: Implement wallet address lookup in User entity
+            // Then update service to query by recipient wallet address
             List<Credential> credentials = credentialService.getCredentialsByRecipient(currentUserId);
             return ResponseEntity.ok(credentials);
         } catch (Exception e) {
@@ -273,6 +263,42 @@ public class CredentialController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse("INTERNAL_ERROR", "Failed to verify credential"));
+        }
+    }
+
+    /**
+     * Extract current user ID from JWT token in SecurityContext
+     *
+     * Helper method to extract authenticated user's ID from Spring Security context.
+     *
+     * Process:
+     * 1. Get Authentication from SecurityContextHolder (set by JwtAuthenticationFilter)
+     * 2. Extract principal (user ID as string from JWT "sub" claim)
+     * 3. Convert to UUID
+     *
+     * Security:
+     * - Called only on authenticated endpoints (@PreAuthorize or authenticated paths)
+     * - User ID comes from validated JWT token (cannot be spoofed)
+     * - JwtAuthenticationFilter guarantees Authentication is set before reaching controller
+     *
+     * @return Current authenticated user's UUID
+     * @throws IllegalStateException if Authentication is null or user ID is invalid
+     */
+    private UUID getCurrentUserId() {
+        // Get authentication from SecurityContext (set by JwtAuthenticationFilter)
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new IllegalStateException("User is not authenticated");
+        }
+
+        // Extract user ID from principal (JWT sub claim = user UUID string)
+        String userIdString = (String) authentication.getPrincipal();
+
+        try {
+            return UUID.fromString(userIdString);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("Invalid user ID in JWT token: " + userIdString, e);
         }
     }
 
