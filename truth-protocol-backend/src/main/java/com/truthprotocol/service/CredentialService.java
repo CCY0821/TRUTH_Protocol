@@ -19,6 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -40,11 +43,11 @@ public class CredentialService {
      * 【CRITICAL】檢查用戶點數，並以原子操作扣除點數。
      * 必須在事務中執行，並使用悲觀鎖防止併發扣點問題。
      *
-     * @param userId 發行者 ID
+     * @param userId          發行者 ID
      * @param requiredCredits 鑄造所需點數
      * @return 更新後的 User 物件
      * @throws InsufficientCreditsException 如果點數不足
-     * @throws IllegalStateException 如果用戶不存在
+     * @throws IllegalStateException        如果用戶不存在
      */
     @Transactional
     public User checkAndDeductCredits(UUID userId, BigDecimal requiredCredits) {
@@ -56,8 +59,7 @@ public class CredentialService {
         if (user.getCredits().compareTo(requiredCredits) < 0) {
             // 拋出業務異常，對應 OpenAPI 規格中的 MINT_INSUFFICIENT_CREDITS (BE-02)
             throw new InsufficientCreditsException(
-                "Insufficient credits. Current: " + user.getCredits() + ", Required: " + requiredCredits
-            );
+                    "Insufficient credits. Current: " + user.getCredits() + ", Required: " + requiredCredits);
         }
 
         // 3. 扣除點數
@@ -72,20 +74,21 @@ public class CredentialService {
      * 建立新的憑證記錄，並將其狀態設置為 QUEUED，準備交由 Relayer Worker 異步處理。
      *
      * @param issuerId 發行者 ID
-     * @param request 鑄造請求 DTO (包含 recipient_wallet_address, metadata, issuer_ref_id)
+     * @param request  鑄造請求 DTO (包含 recipient_wallet_address, metadata,
+     *                 issuer_ref_id)
      * @return 新創建的 Credential Entity
      */
     @Transactional
     public Credential queueMintingJob(UUID issuerId, MintRequest request) {
         // 註: 假定 issuer 在此之前已被驗證且點數已扣除
-        
+
         // ⚠️ 重要修正：Credential Entity 使用 issuer (User object)，而非 issuerId (UUID)
         // 必須先從資料庫查詢 User 物件
         User issuer = userRepository.findById(issuerId)
                 .orElseThrow(() -> new IllegalStateException("Issuer not found: " + issuerId));
-        
+
         Credential credential = Credential.builder()
-                .issuer(issuer)  // ✅ 正確：使用 User object
+                .issuer(issuer) // ✅ 正確：使用 User object
                 // 註: 這裡需要從 DTO 映射到 Entity 欄位
                 .recipientWalletAddress(request.getRecipientWalletAddress())
                 .issuerRefId(request.getIssuerRefId())
@@ -93,7 +96,7 @@ public class CredentialService {
                 .status(CredentialStatus.QUEUED)
                 // token_id, tx_hash, arweave_hash 保持為 NULL
                 .build();
-        
+
         // 儲存 Credential Entity (觸發 QUEUED 狀態的記錄)
         Credential savedCredential = credentialRepository.save(credential);
 
@@ -101,5 +104,73 @@ public class CredentialService {
         // messageQueue.send(new MintingTask(savedCredential.getId()));
 
         return savedCredential;
+    }
+
+    /**
+     * Get all credentials issued by a specific issuer
+     *
+     * @param issuerId Issuer user UUID
+     * @return List of credentials issued by this user (newest first)
+     */
+    public List<Credential> getCredentialsByIssuer(UUID issuerId) {
+        return credentialRepository.findAllByIssuerIdOrderByCreatedAtDesc(issuerId);
+    }
+
+    /**
+     * Get all credentials held by a specific recipient (by wallet address)
+     *
+     * NOTE: This method currently returns an empty list because the User entity
+     * does not have a wallet address field yet. This needs to be implemented.
+     *
+     * TODO: Add wallet_address field to User entity, then implement this method
+     * to look up the user's wallet address and find credentials by that address.
+     *
+     * @param userId Recipient user UUID
+     * @return List of credentials held by this user (newest first)
+     */
+    public List<Credential> getCredentialsByRecipient(UUID userId) {
+        // TODO: Implement wallet address lookup
+        // For now, return empty list
+        //
+        // Future implementation:
+        // 1. Look up user by ID to get their wallet address
+        // 2. Query credentials by recipient wallet address
+        //
+        // User user = userRepository.findById(userId)
+        // .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+        // String walletAddress = user.getWalletAddress();
+        // return
+        // credentialRepository.findAllByRecipientWalletAddressOrderByCreatedAtDesc(walletAddress);
+
+        return List.of(); // Empty list for now
+    }
+
+    /**
+     * Get credential by ID
+     *
+     * @param id Credential UUID
+     * @return Credential if found, null otherwise
+     */
+    public Credential getCredentialById(UUID id) {
+        Optional<Credential> credential = credentialRepository.findById(id);
+        return credential.orElse(null);
+    }
+
+    /**
+     * Get credential by blockchain token ID
+     *
+     * Used for credential verification via QR code scanning.
+     *
+     * @param tokenId Blockchain token ID (from SBT contract)
+     * @return Credential if found, null otherwise
+     */
+    public Credential getCredentialByTokenId(String tokenId) {
+        try {
+            BigInteger tokenIdBigInt = new BigInteger(tokenId);
+            return credentialRepository.findByTokenId(tokenIdBigInt);
+        } catch (NumberFormatException e) {
+            // Invalid token ID format
+            return null;
+        }
     }
 }

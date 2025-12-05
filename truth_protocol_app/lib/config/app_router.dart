@@ -8,6 +8,7 @@ import 'package:truth_protocol_app/presentation/minting/minting_screen.dart';
 import 'package:truth_protocol_app/presentation/history/history_screen.dart';
 import 'package:truth_protocol_app/presentation/history/credential_detail_screen.dart';
 import 'package:truth_protocol_app/presentation/verifier/verifier_screen.dart';
+import 'package:truth_protocol_app/presentation/holder/holder_screen.dart';
 
 part 'app_router.g.dart';
 
@@ -65,6 +66,10 @@ GoRouter appRouter(AppRouterRef ref) {
       GoRoute(
         path: '/verify',
         builder: (context, state) => const VerifierScreen(),
+      ),
+      GoRoute(
+        path: '/wallet',
+        builder: (context, state) => const HolderScreen(),
       ),
     ],
   );

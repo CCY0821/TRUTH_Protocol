@@ -171,6 +171,17 @@ class DashboardScreen extends ConsumerWidget {
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
                     onPressed: () {
+                      context.push('/wallet');
+                    },
+                    icon: const Icon(Icons.account_balance_wallet),
+                    label: const Text('My Wallet'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
                       context.push('/history');
                     },
                     icon: const Icon(Icons.history),

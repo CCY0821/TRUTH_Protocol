@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -181,28 +182,99 @@ public class CredentialController {
     }
 
     /**
-     * Check minting status endpoint (optional)
+     * Get credentials issued by current user
      *
-     * Retrieves the current status of a minting job.
+     * Endpoint: GET /api/v1/credentials
+     * Access: Authenticated users with ISSUER role
      *
-     * Endpoint: GET /api/v1/credentials/{credentialId}/status
+     * @return List of credentials issued by current user
+     */
+    @GetMapping
+    @PreAuthorize("hasAuthority('ISSUER')")
+    public ResponseEntity<?> getMyIssuedCredentials() {
+        try {
+            // TODO: Extract user ID from JWT
+            UUID currentUserId = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+
+            List<Credential> credentials = credentialService.getCredentialsByIssuer(currentUserId);
+            return ResponseEntity.ok(credentials);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("INTERNAL_ERROR", "Failed to fetch credentials"));
+        }
+    }
+
+    /**
+     * Get credentials held by current user (as recipient)
+     *
+     * Endpoint: GET /api/v1/credentials/holder
      * Access: Authenticated users
      *
-     * Implementation Note:
-     * - Uncomment this method if status polling is required
-     * - Ensure proper authorization (only issuer or admin can check status)
-     * - Consider implementing WebSocket for real-time updates instead
-     *
-     * @param credentialId UUID of the credential
-     * @return Current status (QUEUED, PENDING, CONFIRMED, FAILED)
+     * @return List of credentials where current user is the recipient
      */
-    /*
-    @GetMapping("/{credentialId}/status")
-    public ResponseEntity<?> getCredentialStatus(@PathVariable UUID credentialId) {
-        // Implementation here
-        return ResponseEntity.ok("Status: QUEUED");
+    @GetMapping("/holder")
+    public ResponseEntity<?> getMyHeldCredentials() {
+        try {
+            // TODO: Extract user ID from JWT and get their wallet address
+            // For now, return empty list or mock data
+            UUID currentUserId = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+
+            // TODO: Implement service method to get credentials by recipient address
+            List<Credential> credentials = credentialService.getCredentialsByRecipient(currentUserId);
+            return ResponseEntity.ok(credentials);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("INTERNAL_ERROR", "Failed to fetch held credentials"));
+        }
     }
-    */
+
+    /**
+     * Get credential by ID
+     *
+     * Endpoint: GET /api/v1/credentials/{id}
+     * Access: Authenticated users
+     *
+     * @param id UUID of the credential
+     * @return Credential details
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getCredentialById(@PathVariable UUID id) {
+        try {
+            Credential credential = credentialService.getCredentialById(id);
+            if (credential == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ErrorResponse("NOT_FOUND", "Credential not found"));
+            }
+            return ResponseEntity.ok(credential);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("INTERNAL_ERROR", "Failed to fetch credential"));
+        }
+    }
+
+    /**
+     * Verify credential by token ID
+     *
+     * Endpoint: GET /api/v1/credentials/verify/{tokenId}
+     * Access: Public (no authentication required for verification)
+     *
+     * @param tokenId Token ID from blockchain
+     * @return Credential details if valid
+     */
+    @GetMapping("/verify/{tokenId}")
+    public ResponseEntity<?> verifyCredential(@PathVariable String tokenId) {
+        try {
+            Credential credential = credentialService.getCredentialByTokenId(tokenId);
+            if (credential == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ErrorResponse("NOT_FOUND", "Credential not found"));
+            }
+            return ResponseEntity.ok(credential);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("INTERNAL_ERROR", "Failed to verify credential"));
+        }
+    }
 
     /**
      * Error Response DTO (inline for simplicity)

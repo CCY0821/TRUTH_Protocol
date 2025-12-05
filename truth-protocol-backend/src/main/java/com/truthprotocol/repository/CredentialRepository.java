@@ -13,6 +13,7 @@ import com.truthprotocol.entity.CredentialStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,6 +45,7 @@ import java.util.UUID;
  * - And/Or: Combine conditions
  *
  * Example Generated SQL:
+ * 
  * <pre>
  * findAllByStatusAndTxHashIsNotNull(PENDING):
  *
@@ -66,6 +68,7 @@ public interface CredentialRepository extends JpaRepository<Credential, UUID> {
      * Used for issuer dashboard and "My Issuances" view.
      *
      * SQL:
+     * 
      * <pre>
      * SELECT * FROM credentials
      * WHERE issuer_id = ?
@@ -83,7 +86,8 @@ public interface CredentialRepository extends JpaRepository<Credential, UUID> {
     /**
      * Find all credentials by status with non-null transaction hash
      *
-     * Retrieves credentials in a specific status that have been submitted to blockchain.
+     * Retrieves credentials in a specific status that have been submitted to
+     * blockchain.
      * Primarily used by ConfirmationService to find PENDING transactions.
      *
      * Use Cases:
@@ -92,6 +96,7 @@ public interface CredentialRepository extends JpaRepository<Credential, UUID> {
      * - Find FAILED credentials for retry or audit
      *
      * SQL:
+     * 
      * <pre>
      * SELECT * FROM credentials
      * WHERE status = ?
@@ -109,12 +114,12 @@ public interface CredentialRepository extends JpaRepository<Credential, UUID> {
      * - Index scan + filter
      *
      * Example Usage:
+     * 
      * <pre>
      * {@code
      * // Find all PENDING credentials for confirmation
      * List<Credential> pending = repository.findAllByStatusAndTxHashIsNotNull(
-     *     CredentialStatus.PENDING
-     * );
+     *         CredentialStatus.PENDING);
      *
      * // Process each pending credential
      * for (Credential credential : pending) {
@@ -125,7 +130,48 @@ public interface CredentialRepository extends JpaRepository<Credential, UUID> {
      * </pre>
      *
      * @param status Credential status (QUEUED, PENDING, CONFIRMED, FAILED)
-     * @return List of credentials matching criteria (ordered by creation time, oldest first)
+     * @return List of credentials matching criteria (ordered by creation time,
+     *         oldest first)
      */
     List<Credential> findAllByStatusAndTxHashIsNotNull(CredentialStatus status);
+
+    /**
+     * Find all credentials by recipient wallet address
+     *
+     * Retrieves all credentials held by a specific wallet address.
+     * Used for holder wallet view and "My Credentials" page.
+     *
+     * SQL:
+     * 
+     * <pre>
+     * SELECT * FROM credentials
+     * WHERE recipient_wallet_address = ?
+     * ORDER BY created_at DESC
+     * </pre>
+     *
+     * Index Usage:
+     * - Uses idx_credentials_recipient for efficient lookup
+     *
+     * @param recipientAddress Recipient wallet address (e.g., "0x742d35Cc...")
+     * @return List of credentials (ordered by creation time, newest first)
+     */
+    List<Credential> findAllByRecipientWalletAddressOrderByCreatedAtDesc(String recipientAddress);
+
+    /**
+     * Find credential by token ID
+     *
+     * Retrieves a specific credential using its blockchain token ID.
+     * Used for credential verification via QR code scanning.
+     *
+     * SQL:
+     * 
+     * <pre>
+     * SELECT * FROM credentials
+     * WHERE token_id = ?
+     * </pre>
+     *
+     * @param tokenId Blockchain token ID (from SBT contract)
+     * @return Credential if found, null otherwise
+     */
+    Credential findByTokenId(BigInteger tokenId);
 }

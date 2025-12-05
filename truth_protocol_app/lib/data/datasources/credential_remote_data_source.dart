@@ -56,4 +56,14 @@ class CredentialRemoteDataSource {
       rethrow;
     }
   }
+
+  Future<List<Credential>> getHolderCredentials() async {
+    try {
+      final response = await _dio.get('/credentials/holder');
+      final List<dynamic> data = response.data;
+      return data.map((json) => Credential.fromJson(json)).toList();
+    } catch (e) {
+      rethrow;
+    }
+  }
 }
