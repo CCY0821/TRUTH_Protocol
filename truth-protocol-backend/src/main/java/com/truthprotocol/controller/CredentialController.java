@@ -129,7 +129,6 @@ public class CredentialController {
      */
     @PostMapping("/mint")
     @PreAuthorize("hasAuthority('ISSUER')")
-    @Transactional
     public ResponseEntity<?> mintCredential(@Valid @RequestBody MintRequest request) {
         try {
             // Step 1: Extract current user ID from JWT token in SecurityContext

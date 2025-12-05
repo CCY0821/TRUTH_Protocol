@@ -9,6 +9,7 @@ package com.truthprotocol.controller;
 
 import com.truthprotocol.dto.CreditBalanceResponse;
 import com.truthprotocol.dto.PurchaseCreditsRequest;
+import com.truthprotocol.dto.TransactionHistoryResponse;
 import com.truthprotocol.entity.CreditTransaction;
 import com.truthprotocol.service.CreditService;
 import jakarta.validation.Valid;
@@ -63,13 +64,13 @@ public class CreditController {
         try {
             UUID userId = getCurrentUserId();
             CreditBalanceResponse response = CreditBalanceResponse.builder()
-                .userId(userId.toString())
-                .balance(creditService.getBalance(userId))
-                .build();
+                    .userId(userId.toString())
+                    .balance(creditService.getBalance(userId))
+                    .build();
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", e.getMessage()));
+                    .body(new ErrorResponse("INTERNAL_ERROR", e.getMessage()));
         }
     }
 
@@ -85,11 +86,11 @@ public class CreditController {
     public ResponseEntity<?> getTransactionHistory() {
         try {
             UUID userId = getCurrentUserId();
-            List<CreditTransaction> history = creditService.getTransactionHistory(userId);
+            List<TransactionHistoryResponse> history = creditService.getTransactionHistory(userId);
             return ResponseEntity.ok(history);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", e.getMessage()));
+                    .body(new ErrorResponse("INTERNAL_ERROR", e.getMessage()));
         }
     }
 
@@ -112,26 +113,25 @@ public class CreditController {
             UUID userId = getCurrentUserId();
 
             String description = request.getDescription() != null
-                ? request.getDescription()
-                : "Purchased " + request.getAmount() + " credits";
+                    ? request.getDescription()
+                    : "Purchased " + request.getAmount() + " credits";
 
             CreditTransaction transaction = creditService.purchaseCredits(
-                userId,
-                request.getAmount(),
-                description,
-                request.getPaymentReference()
-            );
+                    userId,
+                    request.getAmount(),
+                    description,
+                    request.getPaymentReference());
 
             return ResponseEntity.status(HttpStatus.CREATED).body(transaction);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ErrorResponse("DUPLICATE_PAYMENT", e.getMessage()));
+                    .body(new ErrorResponse("DUPLICATE_PAYMENT", e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ErrorResponse("INVALID_REQUEST", e.getMessage()));
+                    .body(new ErrorResponse("INVALID_REQUEST", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", e.getMessage()));
+                    .body(new ErrorResponse("INTERNAL_ERROR", e.getMessage()));
         }
     }
 
@@ -146,5 +146,6 @@ public class CreditController {
     }
 
     // Error response DTO
-    private record ErrorResponse(String error, String message) {}
+    private record ErrorResponse(String error, String message) {
+    }
 }

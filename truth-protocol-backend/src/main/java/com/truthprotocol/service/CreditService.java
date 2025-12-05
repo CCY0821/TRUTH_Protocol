@@ -7,6 +7,7 @@
 
 package com.truthprotocol.service;
 
+import com.truthprotocol.dto.TransactionHistoryResponse;
 import com.truthprotocol.entity.Credential;
 import com.truthprotocol.entity.CreditTransaction;
 import com.truthprotocol.entity.TransactionType;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Credit Service
@@ -48,9 +50,8 @@ public class CreditService {
     private final CreditTransactionRepository transactionRepository;
 
     public CreditService(
-        UserRepository userRepository,
-        CreditTransactionRepository transactionRepository
-    ) {
+            UserRepository userRepository,
+            CreditTransactionRepository transactionRepository) {
         this.userRepository = userRepository;
         this.transactionRepository = transactionRepository;
     }
@@ -75,21 +76,20 @@ public class CreditService {
      * - Called after payment gateway callback (Stripe, PayPal)
      * - Called by admin for manual top-up
      *
-     * @param userId User UUID
-     * @param amount Amount of credits to add (must be positive)
-     * @param description Transaction description
+     * @param userId           User UUID
+     * @param amount           Amount of credits to add (must be positive)
+     * @param description      Transaction description
      * @param paymentReference External payment system reference (optional)
      * @return Created transaction record
      * @throws IllegalArgumentException if amount is not positive
-     * @throws IllegalStateException if user not found or duplicate payment
+     * @throws IllegalStateException    if user not found or duplicate payment
      */
     @Transactional
     public CreditTransaction purchaseCredits(
-        UUID userId,
-        BigDecimal amount,
-        String description,
-        String paymentReference
-    ) {
+            UUID userId,
+            BigDecimal amount,
+            String description,
+            String paymentReference) {
         // Validation
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Purchase amount must be positive: " + amount);
@@ -105,7 +105,7 @@ public class CreditService {
 
         // Lock user record and add credits
         User user = userRepository.findByIdForUpdate(userId)
-            .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+                .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
 
         BigDecimal previousBalance = user.getCredits();
         BigDecimal newBalance = previousBalance.add(amount);
@@ -116,13 +116,13 @@ public class CreditService {
 
         // Create transaction record
         CreditTransaction transaction = CreditTransaction.builder()
-            .user(user)
-            .transactionType(TransactionType.PURCHASE)
-            .amount(amount)
-            .balanceAfter(newBalance)
-            .description(description)
-            .paymentReference(paymentReference)
-            .build();
+                .user(user)
+                .transactionType(TransactionType.PURCHASE)
+                .amount(amount)
+                .balanceAfter(newBalance)
+                .description(description)
+                .paymentReference(paymentReference)
+                .build();
 
         return transactionRepository.save(transaction);
     }
@@ -136,7 +136,8 @@ public class CreditService {
      *
      * Subtracts credits from user's balance and creates DEDUCT transaction record.
      *
-     * NOTE: This method is typically called from CredentialService.checkAndDeductCredits()
+     * NOTE: This method is typically called from
+     * CredentialService.checkAndDeductCredits()
      * which already locks the user record. This method records the transaction.
      *
      * Business Flow:
@@ -148,30 +149,31 @@ public class CreditService {
      * - Called after successful credit deduction in minting process
      * - Creates audit trail for credential minting cost
      *
-     * @param user User entity (already updated with new balance)
-     * @param amount Amount of credits deducted (should be positive, will be stored as negative)
-     * @param credential Associated credential
+     * @param user        User entity (already updated with new balance)
+     * @param amount      Amount of credits deducted (should be positive, will be
+     *                    stored as negative)
+     * @param credential  Associated credential
      * @param description Transaction description
      * @return Created transaction record
      */
     @Transactional
     public CreditTransaction recordDeduction(
-        User user,
-        BigDecimal amount,
-        Credential credential,
-        String description
-    ) {
+            User user,
+            BigDecimal amount,
+            Credential credential,
+            String description) {
         // Create transaction record (amount is stored as negative for deductions)
         BigDecimal negativeAmount = amount.negate();
 
         CreditTransaction transaction = CreditTransaction.builder()
-            .user(user)
-            .credential(credential)
-            .transactionType(TransactionType.DEDUCT)
-            .amount(negativeAmount)
-            .balanceAfter(user.getCredits())
-            .description(description != null ? description : "Deducted " + amount + " credits for minting credential")
-            .build();
+                .user(user)
+                .credential(credential)
+                .transactionType(TransactionType.DEDUCT)
+                .amount(negativeAmount)
+                .balanceAfter(user.getCredits())
+                .description(
+                        description != null ? description : "Deducted " + amount + " credits for minting credential")
+                .build();
 
         return transactionRepository.save(transaction);
     }
@@ -196,21 +198,20 @@ public class CreditService {
      * - Called when blockchain transaction reverts
      * - Restores user's balance to state before minting attempt
      *
-     * @param userId User UUID
-     * @param amount Amount of credits to refund (must be positive)
-     * @param credential Associated credential
+     * @param userId      User UUID
+     * @param amount      Amount of credits to refund (must be positive)
+     * @param credential  Associated credential
      * @param description Refund reason
      * @return Created transaction record
      * @throws IllegalArgumentException if amount is not positive
-     * @throws IllegalStateException if user not found
+     * @throws IllegalStateException    if user not found
      */
     @Transactional
     public CreditTransaction refundCredits(
-        UUID userId,
-        BigDecimal amount,
-        Credential credential,
-        String description
-    ) {
+            UUID userId,
+            BigDecimal amount,
+            Credential credential,
+            String description) {
         // Validation
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Refund amount must be positive: " + amount);
@@ -218,7 +219,7 @@ public class CreditService {
 
         // Lock user record and add credits back
         User user = userRepository.findByIdForUpdate(userId)
-            .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+                .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
 
         BigDecimal previousBalance = user.getCredits();
         BigDecimal newBalance = previousBalance.add(amount);
@@ -229,13 +230,14 @@ public class CreditService {
 
         // Create transaction record
         CreditTransaction transaction = CreditTransaction.builder()
-            .user(user)
-            .credential(credential)
-            .transactionType(TransactionType.REFUND)
-            .amount(amount)
-            .balanceAfter(newBalance)
-            .description(description != null ? description : "Refunded " + amount + " credits due to minting failure")
-            .build();
+                .user(user)
+                .credential(credential)
+                .transactionType(TransactionType.REFUND)
+                .amount(amount)
+                .balanceAfter(newBalance)
+                .description(
+                        description != null ? description : "Refunded " + amount + " credits due to minting failure")
+                .build();
 
         return transactionRepository.save(transaction);
     }
@@ -254,7 +256,7 @@ public class CreditService {
     @Transactional(readOnly = true)
     public BigDecimal getBalance(UUID userId) {
         User user = userRepository.findById(userId)
-            .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+                .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
         return user.getCredits();
     }
 
@@ -262,13 +264,17 @@ public class CreditService {
      * Get transaction history for a user
      *
      * Returns all credit transactions ordered by creation time (newest first).
+     * Converts entities to DTOs to avoid Hibernate lazy loading issues.
      *
      * @param userId User UUID
-     * @return List of transactions (newest first)
+     * @return List of transaction DTOs (newest first)
      */
     @Transactional(readOnly = true)
-    public List<CreditTransaction> getTransactionHistory(UUID userId) {
-        return transactionRepository.findAllByUser_IdOrderByCreatedAtDesc(userId);
+    public List<TransactionHistoryResponse> getTransactionHistory(UUID userId) {
+        List<CreditTransaction> transactions = transactionRepository.findAllByUser_IdOrderByCreatedAtDesc(userId);
+        return transactions.stream()
+                .map(TransactionHistoryResponse::fromEntity)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -276,18 +282,16 @@ public class CreditService {
      *
      * Returns only transactions of specified type (e.g., only purchases).
      *
-     * @param userId User UUID
+     * @param userId          User UUID
      * @param transactionType Transaction type filter
      * @return List of filtered transactions (newest first)
      */
     @Transactional(readOnly = true)
     public List<CreditTransaction> getTransactionHistoryByType(
-        UUID userId,
-        TransactionType transactionType
-    ) {
+            UUID userId,
+            TransactionType transactionType) {
         return transactionRepository.findAllByUser_IdAndTransactionTypeOrderByCreatedAtDesc(
-            userId,
-            transactionType
-        );
+                userId,
+                transactionType);
     }
 }
