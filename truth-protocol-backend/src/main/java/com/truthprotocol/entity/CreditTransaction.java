@@ -8,6 +8,7 @@
 
 package com.truthprotocol.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -84,6 +85,7 @@ public class CreditTransaction {
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_credit_transaction_user"))
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash", "credits", "kycStatus", "dataRetentionDate", "createdAt", "updatedAt", "lastLoginAt"})
     private User user;
 
     /**
@@ -97,6 +99,7 @@ public class CreditTransaction {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "credential_id", foreignKey = @ForeignKey(name = "fk_credit_transaction_credential"))
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "issuer", "metadataCache", "createdAt", "updatedAt"})
     private Credential credential;
 
     // ========================================================================
