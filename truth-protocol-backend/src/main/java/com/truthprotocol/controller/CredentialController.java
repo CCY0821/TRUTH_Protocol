@@ -135,13 +135,13 @@ public class CredentialController {
             // Step 1: Extract current user ID from JWT token in SecurityContext
             UUID currentUserId = getCurrentUserId();
 
-            // Step 2: Check and deduct credits (pessimistic lock ensures atomicity)
+            // Step 2: Queue credential minting job (creates QUEUED credential)
+            Credential credential = credentialService.queueMintingJob(currentUserId, request);
+
+            // Step 3: Check and deduct credits (pessimistic lock ensures atomicity)
             // Cost per mint: 1.00 credit (configurable in application.yml)
             BigDecimal costPerMint = BigDecimal.ONE;
-            credentialService.checkAndDeductCredits(currentUserId, costPerMint);
-
-            // Step 3: Queue credential minting job
-            Credential credential = credentialService.queueMintingJob(currentUserId, request);
+            credentialService.checkAndDeductCredits(currentUserId, costPerMint, credential);
 
             // Step 4: Build response
             MintResponse response = MintResponse.builder()

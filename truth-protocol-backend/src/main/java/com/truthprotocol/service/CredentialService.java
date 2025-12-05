@@ -33,10 +33,16 @@ public class CredentialService {
 
     private final CredentialRepository credentialRepository;
     private final UserRepository userRepository;
+    private final CreditService creditService;
 
-    public CredentialService(CredentialRepository credentialRepository, UserRepository userRepository) {
+    public CredentialService(
+        CredentialRepository credentialRepository,
+        UserRepository userRepository,
+        CreditService creditService
+    ) {
         this.credentialRepository = credentialRepository;
         this.userRepository = userRepository;
+        this.creditService = creditService;
     }
 
     /**
@@ -45,12 +51,13 @@ public class CredentialService {
      *
      * @param userId          發行者 ID
      * @param requiredCredits 鑄造所需點數
+     * @param credential      關聯的憑證（用於記錄交易）
      * @return 更新後的 User 物件
      * @throws InsufficientCreditsException 如果點數不足
      * @throws IllegalStateException        如果用戶不存在
      */
     @Transactional
-    public User checkAndDeductCredits(UUID userId, BigDecimal requiredCredits) {
+    public User checkAndDeductCredits(UUID userId, BigDecimal requiredCredits, Credential credential) {
         // 1. 使用悲觀鎖鎖定用戶記錄，直到事務完成
         User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
@@ -67,7 +74,17 @@ public class CredentialService {
         user.setCredits(newCredits);
 
         // 4. 儲存用戶 (在事務結束時自動提交)
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+
+        // 5. 記錄點數交易（審計追蹤）
+        creditService.recordDeduction(
+            savedUser,
+            requiredCredits,
+            credential,
+            "Deducted " + requiredCredits + " credits for minting credential"
+        );
+
+        return savedUser;
     }
 
     /**
